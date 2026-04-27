@@ -1,0 +1,253 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Sample stack for RDS MySQL, ElastiCache Redis, and Lambda functions
+  (Node.js and Python).
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID where resources will be deployed
+
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Two or more private subnet IDs for RDS and ElastiCache
+
+  LambdaSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnet IDs for Lambda VPC execution
+
+  DBName:
+    Type: String
+    Default: appdb
+    MinLength: 1
+    MaxLength: 64
+    AllowedPattern: '^[a-zA-Z][a-zA-Z0-9_]*$'
+    Description: Initial database name
+
+  DBUsername:
+    Type: String
+    Default: admin
+    MinLength: 1
+    MaxLength: 16
+    AllowedPattern: '^[a-zA-Z][a-zA-Z0-9]*$'
+    Description: RDS master username
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 41
+    AllowedPattern: '^[ -~]+$'
+    Description: RDS master password (8-41 printable ASCII characters)
+
+  DBAllocatedStorage:
+    Type: Number
+    Default: 20
+    MinValue: 20
+    MaxValue: 65536
+    Description: RDS allocated storage (GiB)
+
+  DBInstanceClass:
+    Type: String
+    Default: db.t4g.micro
+    AllowedValues:
+      - db.t4g.micro
+      - db.t4g.small
+      - db.t4g.medium
+      - db.t3.micro
+      - db.t3.small
+      - db.t3.medium
+    Description: RDS instance class
+
+  RedisNodeType:
+    Type: String
+    Default: cache.t4g.micro
+    AllowedValues:
+      - cache.t4g.micro
+      - cache.t4g.small
+      - cache.t4g.medium
+      - cache.t3.micro
+      - cache.t3.small
+      - cache.t3.medium
+    Description: ElastiCache Redis node type
+
+  LambdaMemorySize:
+    Type: Number
+    Default: 256
+    MinValue: 128
+    MaxValue: 10240
+    Description: Memory size (MB) used for both Lambda functions
+
+Resources:
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access control for RDS, Redis, and Lambda
+      VpcId: !Ref VpcId
+
+  RDSSecurityGroupIngressFromApp:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref AppSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref AppSecurityGroup
+      Description: MySQL access from Lambda/App SG
+
+  RedisSecurityGroupIngressFromApp:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref AppSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      SourceSecurityGroupId: !Ref AppSecurityGroup
+      Description: Redis access from Lambda/App SG
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for MySQL
+      SubnetIds: !Ref PrivateSubnetIds
+
+  MySQLDB:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub '${AWS::StackName}-mysql'
+      Engine: mysql
+      EngineVersion: '8.0.35'
+      DBName: !Ref DBName
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: !Ref DBAllocatedStorage
+      StorageType: gp3
+      PubliclyAccessible: false
+      VPCSecurityGroups:
+        - !Ref AppSecurityGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      BackupRetentionPeriod: 7
+      MultiAZ: false
+      AutoMinorVersionUpgrade: true
+      DeletionProtection: false
+
+  RedisSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: Subnet group for Redis
+      SubnetIds: !Ref PrivateSubnetIds
+
+  RedisReplicationGroup:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      ReplicationGroupDescription: Single-shard Redis replication group
+      Engine: redis
+      EngineVersion: '7.1'
+      CacheNodeType: !Ref RedisNodeType
+      NumNodeGroups: 1
+      ReplicasPerNodeGroup: 1
+      AutomaticFailoverEnabled: true
+      MultiAZEnabled: true
+      CacheSubnetGroupName: !Ref RedisSubnetGroup
+      SecurityGroupIds:
+        - !Ref AppSecurityGroup
+      AtRestEncryptionEnabled: true
+      TransitEncryptionEnabled: true
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+
+  NodeLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-node-handler'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      MemorySize: !Ref LambdaMemorySize
+      Timeout: 30
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref AppSecurityGroup
+        SubnetIds: !Ref LambdaSubnetIds
+      Environment:
+        Variables:
+          MYSQL_ENDPOINT: !GetAtt MySQLDB.Endpoint.Address
+          REDIS_ENDPOINT: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
+      Code:
+        ZipFile: |
+          exports.handler = async () => {
+            return {
+              statusCode: 200,
+              body: JSON.stringify({
+                message: 'Hello from Node.js Lambda',
+                mysqlEndpoint: process.env.MYSQL_ENDPOINT,
+                redisEndpoint: process.env.REDIS_ENDPOINT
+              })
+            };
+          };
+
+  PythonLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-python-handler'
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      MemorySize: !Ref LambdaMemorySize
+      Timeout: 30
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref AppSecurityGroup
+        SubnetIds: !Ref LambdaSubnetIds
+      Environment:
+        Variables:
+          MYSQL_ENDPOINT: !GetAtt MySQLDB.Endpoint.Address
+          REDIS_ENDPOINT: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
+      Code:
+        ZipFile: |
+          import json
+          import os
+
+          def handler(event, context):
+              return {
+                  "statusCode": 200,
+                  "body": json.dumps({
+                      "message": "Hello from Python Lambda",
+                      "mysqlEndpoint": os.getenv("MYSQL_ENDPOINT"),
+                      "redisEndpoint": os.getenv("REDIS_ENDPOINT")
+                  })
+              }
+
+Outputs:
+  RDSInstanceEndpoint:
+    Description: Endpoint address of the MySQL DB instance
+    Value: !GetAtt MySQLDB.Endpoint.Address
+
+  RedisPrimaryEndpoint:
+    Description: Primary endpoint of Redis replication group
+    Value: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
+
+  NodeLambdaFunctionName:
+    Description: Node.js Lambda function name
+    Value: !Ref NodeLambdaFunction
+
+  PythonLambdaFunctionName:
+    Description: Python Lambda function name
+    Value: !Ref PythonLambdaFunction
