@@ -23,5 +23,5 @@ aws cloudformation deploy \
 
 ## CI (reviewdog + cfn-lint)
 
-This repository runs `cfn-lint` on pull requests using reviewdog and reports results as a PR check.
+This repository runs `cfn-lint` on pull requests using `shogo82148/actions-cfn-lint@v1` (reviewdog integrated) and reports results as a PR check.
 Workflow file: `.github/workflows/reviewdog-cfn-lint.yml`.
