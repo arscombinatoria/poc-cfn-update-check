@@ -20,3 +20,8 @@ aws cloudformation deploy \
     LambdaSubnetIds='subnet-aaaaaaa,subnet-bbbbbbb' \
     DBPassword='YourStrongPassword123!'
 ```
+
+## CI (reviewdog + cfn-lint)
+
+This repository runs `cfn-lint` on pull requests using `shogo82148/actions-cfn-lint@v1` (reviewdog integrated) and reports results as a PR check.
+Workflow file: `.github/workflows/reviewdog-cfn-lint.yml`.
