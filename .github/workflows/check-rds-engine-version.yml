@@ -33,7 +33,7 @@ jobs:
 
       - name: Create issue when update exists
         if: steps.check.outputs.has_update == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const title = `${{ steps.check.outputs.issue_title }}`;
