@@ -25,3 +25,7 @@ aws cloudformation deploy \
 
 This repository runs `cfn-lint` on pull requests using `shogo82148/actions-cfn-lint@v1` (reviewdog integrated) and reports results as a PR check.
 Workflow file: `.github/workflows/reviewdog-cfn-lint.yml`.
+
+It also includes scheduled engine-version checks based on cfn-lint schema data:
+- RDS: `.github/workflows/check-rds-engine-version.yml`
+- ElastiCache: `.github/workflows/check-elasticache-engine-version.yml`
