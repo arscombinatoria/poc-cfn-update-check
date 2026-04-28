@@ -1,0 +1,91 @@
+name: cfn rds engine update check
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+  push:
+    paths:
+      - 'cloudformation.yml'
+      - '.github/script/check_rds_engine_version.py'
+      - '.github/workflows/cfn-rds-engine-update-check.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-rds-engine-version:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+
+      - name: Check RDS engine version
+        id: check
+        run: |
+          python .github/script/check_rds_engine_version.py \
+            --template cloudformation.yml \
+            --logical-id MySQLDB \
+            --issue-body /tmp/cfn-rds-update-issue.md
+
+      - name: Create issue when update exists
+        if: steps.check.outputs.has_update == 'true'
+        uses: actions/github-script@v8
+        env:
+          ISSUE_BODY_FILE: /tmp/cfn-rds-update-issue.md
+          ISSUE_TITLE: 'chore: update RDS ${{ steps.check.outputs.engine }} EngineVersion to ${{ steps.check.outputs.latest_version }} (${{ steps.check.outputs.logical_id }})'
+          ISSUE_LABEL: cfn-rds-engine-update
+        with:
+          script: |
+            const fs = require('node:fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const title = process.env.ISSUE_TITLE;
+            const label = process.env.ISSUE_LABEL;
+            const body = fs.readFileSync(process.env.ISSUE_BODY_FILE, 'utf8');
+
+            const { data: labels } = await github.rest.issues.listLabelsOnRepo({ owner, repo, per_page: 100 });
+            const hasLabel = labels.some((item) => item.name === label);
+            if (!hasLabel) {
+              await github.rest.issues.createLabel({
+                owner,
+                repo,
+                name: label,
+                color: '1D76DB',
+                description: 'CloudFormation RDS engine version update reminder'
+              });
+            }
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'open',
+              labels: label,
+              per_page: 100,
+            });
+
+            const duplicate = issues.find((issue) => issue.title === title);
+            if (duplicate) {
+              core.info(`Skip creating issue because it already exists: #${duplicate.number}`);
+              return;
+            }
+
+            const created = await github.rest.issues.create({
+              owner,
+              repo,
+              title,
+              body,
+              labels: [label],
+            });
+
+            core.info(`Created issue #${created.data.number}`);
