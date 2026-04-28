@@ -1,0 +1,78 @@
+name: Check Lambda Runtime Version Updates
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - cloudformation.yml
+      - .github/script/check_lambda_runtime_updates.py
+      - .github/workflows/check-lambda-runtime-version.yml
+  schedule:
+    # 06:00 Asia/Tokyo (GitHub Actions schedule uses UTC)
+    - cron: "0 21 * * *"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-lambda-runtime-version:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install cfn-lint
+
+      - name: Check Lambda runtime updates from cfn-lint data
+        id: check
+        run: |
+          python .github/script/check_lambda_runtime_updates.py --template cloudformation.yml
+
+      - name: Create issues when update exists
+        if: steps.check.outputs.has_update == 'true'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const issuesRaw = ${{ toJSON(steps.check.outputs.issues) }};
+            const issues = JSON.parse(issuesRaw);
+
+            if (!Array.isArray(issues)) {
+              throw new TypeError(`issues is not an array: ${typeof issues}`);
+            }
+            const { owner, repo } = context.repo;
+
+            const existing = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'open',
+              creator: 'github-actions[bot]',
+              per_page: 100,
+            });
+
+            const openTitles = new Set(existing.data.map((issue) => issue.title));
+
+            for (const issue of issues) {
+              if (openTitles.has(issue.title)) {
+                core.info(`Issue already exists: ${issue.title}`);
+                continue;
+              }
+
+              const created = await github.rest.issues.create({
+                owner,
+                repo,
+                title: issue.title,
+                body: issue.body,
+                labels: ['dependencies', 'lambda'],
+              });
+
+              core.info(`Created issue #${created.data.number}`);
+            }
