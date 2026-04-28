@@ -2,6 +2,11 @@ name: Check RDS Engine Version Updates
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - cloudformation.yml
+      - .github/script/check_rds_engine_updates.py
+      - .github/workflows/check-rds-engine-version.yml
   schedule:
     # 06:00 Asia/Tokyo (GitHub Actions schedule uses UTC)
     - cron: "0 21 * * *"
