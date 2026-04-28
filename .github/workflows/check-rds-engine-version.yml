@@ -3,7 +3,8 @@ name: Check RDS Engine Version Updates
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 1 * * *"
+    # 06:00 Asia/Tokyo (GitHub Actions schedule uses UTC)
+    - cron: "0 21 * * *"
 
 permissions:
   contents: read
