@@ -174,7 +174,7 @@ Resources:
     Properties:
       ReplicationGroupDescription: Single-shard Valkey replication group
       Engine: valkey
-      EngineVersion: '7.2'
+      EngineVersion: '8.1'
       CacheNodeType: !Ref ValkeyNodeType
       NumNodeGroups: 1
       ReplicasPerNodeGroup: 1
