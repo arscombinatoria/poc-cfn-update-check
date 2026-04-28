@@ -118,7 +118,7 @@ Resources:
     Properties:
       DBInstanceIdentifier: !Sub '${AWS::StackName}-mysql'
       Engine: mysql
-      EngineVersion: '8.0.35'
+      EngineVersion: '8.4.7'
       DBName: !Ref DBName
       MasterUsername: !Ref DBUsername
       MasterUserPassword: !Ref DBPassword
