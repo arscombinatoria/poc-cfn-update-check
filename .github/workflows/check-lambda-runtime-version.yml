@@ -42,7 +42,12 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            const issues = ${{ fromJSON(steps.check.outputs.issues) }};
+            const issuesRaw = ${{ toJSON(steps.check.outputs.issues) }};
+            const issues = JSON.parse(issuesRaw);
+
+            if (!Array.isArray(issues)) {
+              throw new TypeError(`issues is not an array: ${typeof issues}`);
+            }
             const { owner, repo } = context.repo;
 
             const existing = await github.rest.issues.listForRepo({
