@@ -37,14 +37,12 @@ jobs:
         run: |
           python .github/script/check_lambda_runtime_updates.py --template cloudformation.yml
 
-      - name: Create issue when update exists
+      - name: Create issues when update exists
         if: steps.check.outputs.has_update == 'true'
         uses: actions/github-script@v9
         with:
           script: |
-            const title = ${{ toJSON(steps.check.outputs.issue_title) }};
-            const body = ${{ toJSON(steps.check.outputs.issue_body) }};
-
+            const issues = ${{ fromJSON(steps.check.outputs.issues) }};
             const { owner, repo } = context.repo;
 
             const existing = await github.rest.issues.listForRepo({
@@ -55,18 +53,21 @@ jobs:
               per_page: 100,
             });
 
-            const duplicate = existing.data.find((issue) => issue.title === title);
-            if (duplicate) {
-              core.info(`Issue already exists: #${duplicate.number}`);
-              return;
+            const openTitles = new Set(existing.data.map((issue) => issue.title));
+
+            for (const issue of issues) {
+              if (openTitles.has(issue.title)) {
+                core.info(`Issue already exists: ${issue.title}`);
+                continue;
+              }
+
+              const created = await github.rest.issues.create({
+                owner,
+                repo,
+                title: issue.title,
+                body: issue.body,
+                labels: ['dependencies', 'lambda'],
+              });
+
+              core.info(`Created issue #${created.data.number}`);
             }
-
-            const created = await github.rest.issues.create({
-              owner,
-              repo,
-              title,
-              body,
-              labels: ['dependencies', 'lambda'],
-            });
-
-            core.info(`Created issue #${created.data.number}`);

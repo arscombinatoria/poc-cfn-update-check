@@ -73,11 +73,10 @@ def extract_lambda_resources(template: dict[str, Any]) -> list[dict[str, str]]:
     return results
 
 
-def build_issue(updates: list[dict[str, str]], template_path: Path) -> tuple[str, str]:
-    first = updates[0]
+def build_issue(update: dict[str, str], template_path: Path) -> tuple[str, str]:
     title = (
         "chore: Lambda runtime update available "
-        f"({first['logical_id']} {first['current_runtime']} -> {first['latest_runtime']})"
+        f"({update['logical_id']} {update['current_runtime']} -> {update['latest_runtime']})"
     )
     lines = [
         "CloudFormation の Lambda ランタイム更新候補が見つかりました。",
@@ -86,15 +85,10 @@ def build_issue(updates: list[dict[str, str]], template_path: Path) -> tuple[str
         "",
         "| Logical ID | Current Runtime | Latest (cfn-lint schema) |",
         "|---|---|---|",
+        f"| `{update['logical_id']}` | `{update['current_runtime']}` | `{update['latest_runtime']}` |",
+        "",
+        "この Issue は `.github/script/check_lambda_runtime_updates.py` により自動生成されました。",
     ]
-    for u in updates:
-        lines.append(
-            f"| `{u['logical_id']}` | `{u['current_runtime']}` | `{u['latest_runtime']}` |"
-        )
-    lines.append("")
-    lines.append(
-        "この Issue は `.github/script/check_lambda_runtime_updates.py` により自動生成されました。"
-    )
     return title, "\n".join(lines)
 
 
@@ -122,16 +116,17 @@ def main() -> int:
         if latest and resource["current_runtime"] != latest:
             updates.append({**resource, "latest_runtime": latest})
 
-    has_update = bool(updates)
-    issue_title = ""
-    issue_body = ""
-    if has_update:
-        issue_title, issue_body = build_issue(updates, template_path)
+    issue_payloads: list[dict[str, str]] = []
+    for update in updates:
+        title, body = build_issue(update, template_path)
+        issue_payloads.append({"title": title, "body": body})
 
+    has_update = bool(issue_payloads)
     result = {
         "has_update": has_update,
         "template": str(template_path),
         "updates": updates,
+        "issues": issue_payloads,
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
@@ -140,8 +135,7 @@ def main() -> int:
             args.github_output,
             {
                 "has_update": "true" if has_update else "false",
-                "issue_title": issue_title,
-                "issue_body": issue_body,
+                "issues": json.dumps(issue_payloads, ensure_ascii=False),
             },
         )
 
