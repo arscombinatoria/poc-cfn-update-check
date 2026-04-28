@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  Sample stack for RDS MySQL, ElastiCache Redis, and Lambda functions
+  Sample stack for RDS MySQL, ElastiCache Redis/Valkey, and Lambda functions
   (Node.js and Python).
 
 Parameters:
@@ -70,6 +70,18 @@ Parameters:
       - cache.t3.small
       - cache.t3.medium
     Description: ElastiCache Redis node type
+
+  ValkeyNodeType:
+    Type: String
+    Default: cache.t4g.micro
+    AllowedValues:
+      - cache.t4g.micro
+      - cache.t4g.small
+      - cache.t4g.medium
+      - cache.t3.micro
+      - cache.t3.small
+      - cache.t3.medium
+    Description: ElastiCache Valkey node type
 
   LambdaMemorySize:
     Type: Number
@@ -157,6 +169,23 @@ Resources:
       AtRestEncryptionEnabled: true
       TransitEncryptionEnabled: true
 
+  ValkeyReplicationGroup:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      ReplicationGroupDescription: Single-shard Valkey replication group
+      Engine: valkey
+      EngineVersion: '7.2'
+      CacheNodeType: !Ref ValkeyNodeType
+      NumNodeGroups: 1
+      ReplicasPerNodeGroup: 1
+      AutomaticFailoverEnabled: true
+      MultiAZEnabled: true
+      CacheSubnetGroupName: !Ref RedisSubnetGroup
+      SecurityGroupIds:
+        - !Ref AppSecurityGroup
+      AtRestEncryptionEnabled: true
+      TransitEncryptionEnabled: true
+
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -190,6 +219,7 @@ Resources:
         Variables:
           MYSQL_ENDPOINT: !GetAtt MySQLDB.Endpoint.Address
           REDIS_ENDPOINT: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
+          VALKEY_ENDPOINT: !GetAtt ValkeyReplicationGroup.PrimaryEndPoint.Address
       Code:
         ZipFile: |
           exports.handler = async () => {
@@ -198,7 +228,8 @@ Resources:
               body: JSON.stringify({
                 message: 'Hello from Node.js Lambda',
                 mysqlEndpoint: process.env.MYSQL_ENDPOINT,
-                redisEndpoint: process.env.REDIS_ENDPOINT
+                redisEndpoint: process.env.REDIS_ENDPOINT,
+                valkeyEndpoint: process.env.VALKEY_ENDPOINT
               })
             };
           };
@@ -220,6 +251,7 @@ Resources:
         Variables:
           MYSQL_ENDPOINT: !GetAtt MySQLDB.Endpoint.Address
           REDIS_ENDPOINT: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
+          VALKEY_ENDPOINT: !GetAtt ValkeyReplicationGroup.PrimaryEndPoint.Address
       Code:
         ZipFile: |
           import json
@@ -231,7 +263,8 @@ Resources:
                   "body": json.dumps({
                       "message": "Hello from Python Lambda",
                       "mysqlEndpoint": os.getenv("MYSQL_ENDPOINT"),
-                      "redisEndpoint": os.getenv("REDIS_ENDPOINT")
+                      "redisEndpoint": os.getenv("REDIS_ENDPOINT"),
+                      "valkeyEndpoint": os.getenv("VALKEY_ENDPOINT")
                   })
               }
 
@@ -243,6 +276,10 @@ Outputs:
   RedisPrimaryEndpoint:
     Description: Primary endpoint of Redis replication group
     Value: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
+
+  ValkeyPrimaryEndpoint:
+    Description: Primary endpoint of Valkey replication group
+    Value: !GetAtt ValkeyReplicationGroup.PrimaryEndPoint.Address
 
   NodeLambdaFunctionName:
     Description: Node.js Lambda function name
