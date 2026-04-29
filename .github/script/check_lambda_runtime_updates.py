@@ -6,20 +6,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 from pathlib import Path
 from typing import Any
 
-from cfnlint.decode import cfn_yaml
 from cfnlint.schema.manager import ProviderSchemaManager
 
-
-def natural_version_key(value: str) -> list[Any]:
-    parts = re.findall(r"\d+|[A-Za-z]+", str(value))
-    key: list[Any] = []
-    for p in parts:
-        key.append((0, int(p)) if p.isdigit() else (1, p.lower()))
-    return key
+from common import load_template_or_fail, natural_version_key, print_json_result, write_github_output
 
 
 def runtime_family_and_version(runtime: str) -> tuple[str, str]:
@@ -92,12 +84,6 @@ def build_issue(update: dict[str, str], template_path: Path) -> tuple[str, str]:
     return title, "\n".join(lines)
 
 
-def write_github_output(path: str, outputs: dict[str, str]) -> None:
-    with open(path, "a", encoding="utf-8") as fp:
-        for key, value in outputs.items():
-            fp.write(f"{key}<<EOF\n{value}\nEOF\n")
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--template", default="cloudformation.yml")
@@ -106,7 +92,7 @@ def main() -> int:
     args = parser.parse_args()
 
     template_path = Path(args.template)
-    template = cfn_yaml.load(str(template_path))
+    template = load_template_or_fail(template_path)
     lambda_resources = extract_lambda_resources(template)
     runtimes = cfn_lint_lambda_runtimes(args.region)
 
@@ -128,7 +114,7 @@ def main() -> int:
         "updates": updates,
         "issues": issue_payloads,
     }
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print_json_result(result)
 
     if args.github_output:
         write_github_output(
