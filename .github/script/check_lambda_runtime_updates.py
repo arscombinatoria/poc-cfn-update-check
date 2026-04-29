@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check CloudFormation Lambda Runtime values against cfn-lint provider schema data."""
+"""CloudFormation の Lambda Runtime を cfn-lint のスキーマデータと照合する。"""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from common import load_template_or_fail, natural_version_key, print_json_result
 
 
 def runtime_family_and_version(runtime: str) -> tuple[str, str]:
+    """Lambda runtime 文字列をファミリ接頭辞とバージョン接尾辞に分割する。"""
     if runtime.startswith("provided.al"):
         return "provided.al", runtime.removeprefix("provided.al")
 
@@ -27,6 +28,7 @@ def runtime_family_and_version(runtime: str) -> tuple[str, str]:
 
 
 def cfn_lint_lambda_runtimes(region: str = "us-east-1") -> list[str]:
+    """cfn-lint のプロバイダースキーマから並び替え可能な Runtime 一覧を取得する。"""
     manager = ProviderSchemaManager()
     schema = manager.get_resource_schema(region, "AWS::Lambda::Function")
     runtimes = schema.schema.get("properties", {}).get("Runtime", {}).get("enum", [])
@@ -34,6 +36,7 @@ def cfn_lint_lambda_runtimes(region: str = "us-east-1") -> list[str]:
 
 
 def latest_runtime_for_family(current_runtime: str, runtimes: list[str]) -> str | None:
+    """現在の runtime と同じファミリ内で最新の runtime を返す。"""
     family, _ = runtime_family_and_version(current_runtime)
 
     family_runtimes = [r for r in runtimes if runtime_family_and_version(r)[0] == family]
@@ -47,6 +50,7 @@ def latest_runtime_for_family(current_runtime: str, runtimes: list[str]) -> str 
 
 
 def extract_lambda_resources(template: dict[str, Any]) -> list[dict[str, str]]:
+    """テンプレートから Lambda の Logical ID と runtime 文字列を抽出する。"""
     resources = template.get("Resources", {})
     results: list[dict[str, str]] = []
     for logical_id, resource in resources.items():
@@ -66,6 +70,7 @@ def extract_lambda_resources(template: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def build_issue(update: dict[str, str], template_path: Path) -> tuple[str, str]:
+    """検知した Lambda runtime 更新向けの Issue タイトルと本文を生成する。"""
     title = (
         "chore: Lambda runtime update available "
         f"({update['logical_id']} {update['current_runtime']} -> {update['latest_runtime']})"
@@ -85,6 +90,7 @@ def build_issue(update: dict[str, str], template_path: Path) -> tuple[str, str]:
 
 
 def main() -> int:
+    """Lambda runtime 更新チェック CLI を実行し、構造化結果を出力する。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--template", default="cloudformation.yml")
     parser.add_argument("--region", default="us-east-1")
