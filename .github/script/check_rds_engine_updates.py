@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check CloudFormation RDS EngineVersion values against cfn-lint internal engine data."""
+"""CloudFormation の RDS EngineVersion を cfn-lint の内部データと照合する。"""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from common import load_template_or_fail, natural_version_key, print_json_result
 
 
 def cfn_lint_rds_engine_versions(engine: str) -> list[str]:
+    """指定した RDS エンジンで利用可能なバージョン一覧を cfn-lint データから読み込む。"""
     base = Path(cfnlint.__file__).resolve().parent
     path = base / "data" / "schemas" / "extensions" / "aws_rds_dbinstance" / "engine_version.json"
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -38,6 +39,7 @@ def cfn_lint_rds_engine_versions(engine: str) -> list[str]:
 
 
 def extract_rds_resources(template: dict[str, Any]) -> list[dict[str, str]]:
+    """RDS DBInstance の Logical ID・Engine・EngineVersion を抽出する。"""
     resources = template.get("Resources", {})
     results: list[dict[str, str]] = []
     for logical_id, resource in resources.items():
@@ -59,6 +61,7 @@ def extract_rds_resources(template: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def build_issue(updates: list[dict[str, str]], template_path: Path) -> tuple[str, str]:
+    """1 件以上の RDS エンジン更新候補を説明する Issue 情報を生成する。"""
     first = updates[0]
     title = (
         f"chore: RDS engine update available ({first['logical_id']} {first['current_version']} -> {first['latest_version']})"
@@ -81,6 +84,7 @@ def build_issue(updates: list[dict[str, str]], template_path: Path) -> tuple[str
 
 
 def main() -> int:
+    """RDS エンジン更新チェック CLI を実行し、構造化結果を出力する。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--template", default="cloudformation.yml")
     parser.add_argument("--github-output", default=os.getenv("GITHUB_OUTPUT"))

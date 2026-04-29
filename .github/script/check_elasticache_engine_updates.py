@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check CloudFormation ElastiCache EngineVersion values against cfn-lint internal engine data."""
+"""CloudFormation の ElastiCache EngineVersion を cfn-lint の内部データと照合する。"""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from common import load_template_or_fail, natural_version_key, print_json_result
 
 
 def cfn_lint_elasticache_engine_versions(engine: str) -> list[str]:
+    """指定した ElastiCache エンジンで利用可能なバージョン一覧を cfn-lint データから読み込む。"""
     base = Path(cfnlint.__file__).resolve().parent
     candidate_paths = [
         base
@@ -23,8 +24,8 @@ def cfn_lint_elasticache_engine_versions(engine: str) -> list[str]:
         / "extensions"
         / "aws_elasticache_replicationgroup"
         / "engine_version.json",
-        # ReplicationGroup updates can be tracked with the same ElastiCache engine dataset
-        # when a dedicated schema extension file is not available.
+        # 専用の schema 拡張ファイルが無い場合は、同じ ElastiCache エンジン定義を使って
+        # ReplicationGroup の更新候補を追跡する。
         base
         / "data"
         / "schemas"
@@ -60,6 +61,7 @@ def cfn_lint_elasticache_engine_versions(engine: str) -> list[str]:
 
 
 def extract_elasticache_resources(template: dict[str, Any]) -> list[dict[str, str]]:
+    """ElastiCache ReplicationGroup の Logical ID・Engine・EngineVersion を抽出する。"""
     resources = template.get("Resources", {})
     results: list[dict[str, str]] = []
     for logical_id, resource in resources.items():
@@ -81,6 +83,7 @@ def extract_elasticache_resources(template: dict[str, Any]) -> list[dict[str, st
 
 
 def build_issue(updates: list[dict[str, str]], template_path: Path) -> tuple[str, str]:
+    """1 件以上の ElastiCache エンジン更新候補を説明する Issue 情報を生成する。"""
     first = updates[0]
     title = (
         "chore: ElastiCache engine update available "
@@ -106,6 +109,7 @@ def build_issue(updates: list[dict[str, str]], template_path: Path) -> tuple[str
 
 
 def main() -> int:
+    """ElastiCache エンジン更新チェック CLI を実行し、構造化結果を出力する。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--template", default="cloudformation.yml")
     parser.add_argument("--github-output", default=os.getenv("GITHUB_OUTPUT"))
