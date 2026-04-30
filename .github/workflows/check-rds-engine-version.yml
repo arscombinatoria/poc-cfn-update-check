@@ -26,11 +26,13 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.14"
+          cache: "pip"
+          cache-dependency-path: ".github/requirements/update-check.txt"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install cfn-lint
+          python -m pip install -r .github/requirements/update-check.txt
 
       - name: Check RDS engine updates from cfn-lint data
         id: check
