@@ -16,10 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v6.0.0
 
       - name: Run cfn-lint with reviewdog
-        uses: shogo82148/actions-cfn-lint@v4
+        uses: shogo82148/actions-cfn-lint@bfb9458722f19d96c303a56ea984877174ce2b29 # v4.57.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-check
